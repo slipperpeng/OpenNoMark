@@ -23,6 +23,8 @@ import {
 } from "@phosphor-icons/react";
 
 import { CompareSlider } from "./components/CompareSlider";
+import { ManualMaskEditor } from "./components/ManualMaskEditor";
+import type { ManualRegion } from "./components/ManualMaskEditor";
 import { MagneticButton } from "./components/MagneticButton";
 import { useLocale } from "./i18n";
 import type { Copy } from "./i18n";
@@ -34,6 +36,7 @@ type UiErrorCode = "connection" | "serverStatus" | "missingResult" | "incomplete
 type UiMessage =
   | { kind: "skippedFiles" }
   | { kind: "batchFailure"; count: number }
+  | { kind: "manualNeedsRegion" }
   | { kind: "zipFailure"; error: UiError };
 
 interface UiError {
@@ -59,6 +62,7 @@ interface ImageEntry {
   phase: TaskPhase;
   uploadProgress: number;
   result?: ProcessResult;
+  manualRegions?: ManualRegion[];
 }
 
 interface BatchProgress {
@@ -169,6 +173,7 @@ function resultErrorCopy(t: Copy, result: ProcessResult): string {
 function messageCopy(t: Copy, message: UiMessage): string {
   if (message.kind === "skippedFiles") return t.skippedFiles;
   if (message.kind === "batchFailure") return t.batchFailure(message.count);
+  if (message.kind === "manualNeedsRegion") return t.manualNeedsRegion;
   return t.zipFailure(errorCopy(t, message.error));
 }
 
@@ -298,6 +303,7 @@ export default function App() {
   const [downloadingBatch, setDownloadingBatch] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [message, setMessage] = useState<UiMessage | null>(null);
+  const [manualEditingId, setManualEditingId] = useState<string | null>(null);
   const imagesRef = useRef<ImageEntry[]>([]);
 
   useEffect(() => {
@@ -369,12 +375,14 @@ export default function App() {
     if (selectedId === id) {
       setSelectedId(next[Math.min(index, Math.max(0, next.length - 1))]?.id || null);
     }
+    if (manualEditingId === id) setManualEditingId(null);
   };
 
   const clearAll = () => {
     images.forEach((entry) => URL.revokeObjectURL(entry.preview));
     setImages([]);
     setSelectedId(null);
+    setManualEditingId(null);
     setMessage(null);
     setBatchProgress({ completed: 0, total: 0 });
   };
@@ -479,7 +487,86 @@ export default function App() {
     }
   };
 
+  const updateManualRegions = useCallback((id: string, regions: ManualRegion[]) => {
+    setImages((current) =>
+      current.map((entry) => entry.id === id ? { ...entry, manualRegions: regions } : entry),
+    );
+  }, []);
+
+  const processManualEntry = async (entry: ImageEntry) => {
+    if (processing) return;
+    const regions = entry.manualRegions || [];
+    if (!regions.length) {
+      setMessage({ kind: "manualNeedsRegion" });
+      return;
+    }
+
+    setProcessing(true);
+    setManualEditingId(null);
+    setMessage(null);
+    setActiveIds(new Set([entry.id]));
+    setImages((current) =>
+      current.map((item) =>
+        item.id === entry.id
+          ? { ...item, phase: "processing", uploadProgress: 100, result: undefined }
+          : item,
+      ),
+    );
+
+    try {
+      const formData = new FormData();
+      formData.append("file", entry.file);
+      formData.append("regions", JSON.stringify(regions));
+      const response = await fetch("/api/remove-manual", {
+        method: "POST",
+        body: formData,
+      });
+      if (!response.ok) throw new RequestFailure("serverStatus", response.status);
+      const payload = await response.json() as { results?: Partial<ProcessResult>[] };
+      if (!Array.isArray(payload.results)) throw new RequestFailure("missingResult");
+      const result = normalizeResult(payload.results[0], entry.file);
+      setImages((current) =>
+        current.map((item) =>
+          item.id === entry.id
+            ? {
+                ...item,
+                phase: result.status === "error" ? "error" : "done",
+                uploadProgress: 100,
+                result,
+              }
+            : item,
+        ),
+      );
+    } catch (error) {
+      const failure = error instanceof RequestFailure
+        ? error
+        : new RequestFailure("unknown");
+      setImages((current) =>
+        current.map((item) =>
+          item.id === entry.id
+            ? {
+                ...item,
+                phase: "error",
+                result: {
+                  filename: item.file.name,
+                  status: "error",
+                  watermarks_found: 0,
+                  download_url: null,
+                  error_code: failure.code,
+                  error_status: failure.status,
+                },
+              }
+            : item,
+        ),
+      );
+    } finally {
+      setActiveIds(new Set());
+      setProcessing(false);
+    }
+  };
+
   const selected = images.find((entry) => entry.id === selectedId) || images[0] || null;
+  const manualEditing = Boolean(selected && manualEditingId === selected.id);
   const activeEntries = images.filter((entry) => activeIds.has(entry.id));
   const downloadable = images.filter(
     (entry) => entry.result?.download_url && entry.result.job_id && entry.result.status !== "error",
@@ -867,7 +954,16 @@ export default function App() {
             <EmptyWorkbench t={t} />
           ) : (
             <div className="p-4 sm:p-6 lg:p-7">
-              {selected.result?.status === "cleaned" && selected.result.download_url && selected.phase === "done" ? (
+              {manualEditing ? (
+                <ManualMaskEditor
+                  key={selected.id}
+                  image={selected.preview}
+                  filename={selected.file.name}
+                  regions={selected.manualRegions || []}
+                  onChange={(regions) => updateManualRegions(selected.id, regions)}
+                  copy={t}
+                />
+              ) : selected.result?.status === "cleaned" && selected.result.download_url && selected.phase === "done" ? (
                 <CompareSlider
                   key={selected.id}
                   before={selected.preview}
@@ -940,6 +1036,58 @@ export default function App() {
                     <ImagesIcon size={15} weight="regular" />
                     {processing ? t.progressComplete(batchProgress.completed, batchProgress.total) : t.batchSafeOutput}
                   </span>
+                )}
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--line)] pt-4">
+                {manualEditing ? (
+                  <>
+                    <MagneticButton
+                      variant="secondary"
+                      disabled={!selected.manualRegions?.length}
+                      onClick={() => updateManualRegions(
+                        selected.id,
+                        (selected.manualRegions || []).slice(0, -1),
+                      )}
+                    >
+                      <ArrowClockwiseIcon size={16} weight="regular" />
+                      {t.manualUndo}
+                    </MagneticButton>
+                    <MagneticButton
+                      variant="quiet"
+                      disabled={!selected.manualRegions?.length}
+                      onClick={() => updateManualRegions(selected.id, [])}
+                    >
+                      <TrashIcon size={16} weight="regular" />
+                      {t.manualClear}
+                    </MagneticButton>
+                    <MagneticButton
+                      disabled={!selected.manualRegions?.length || processing}
+                      onClick={() => void processManualEntry(selected)}
+                    >
+                      <SparkleIcon size={16} weight="fill" />
+                      {processing ? t.manualProcessing : t.manualApply}
+                    </MagneticButton>
+                    <MagneticButton
+                      variant="quiet"
+                      disabled={processing}
+                      onClick={() => setManualEditingId(null)}
+                    >
+                      {t.manualCancel}
+                    </MagneticButton>
+                  </>
+                ) : (
+                  <MagneticButton
+                    variant="secondary"
+                    disabled={selectedBusy || processing}
+                    onClick={() => {
+                      setMessage(null);
+                      setManualEditingId(selected.id);
+                    }}
+                  >
+                    <ImageSquareIcon size={16} weight="regular" />
+                    {t.manualEdit}
+                  </MagneticButton>
                 )}
               </div>
             </div>

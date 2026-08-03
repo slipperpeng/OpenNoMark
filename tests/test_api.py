@@ -179,6 +179,68 @@ class TestAPI:
         resp = client.post("/api/remove")
         assert resp.status_code == 422  # validation error
 
+    def test_remove_manual_uses_confirmed_normalized_regions(
+        self, client, sample_image, monkeypatch
+    ):
+        import opennomark.api as api
+
+        class ManualPipeline:
+            def __init__(self):
+                self.regions = None
+
+            def process_manual(self, input_path, regions, output_path):
+                self.regions = regions
+                image = Image.open(input_path).convert("RGB")
+                image.save(output_path)
+                return image, {
+                    "status": "cleaned",
+                    "watermarks_found": len(regions),
+                }
+
+        pipeline = ManualPipeline()
+        monkeypatch.setattr(api, "_pipeline", pipeline)
+        with open(sample_image, "rb") as file:
+            response = client.post(
+                "/api/remove-manual",
+                files={"file": ("manual.png", file, "image/png")},
+                data={
+                    "regions": '[{"x":0.7,"y":0.75,"width":0.12,"height":0.1}]'
+                },
+            )
+
+        result = response.json()["results"][0]
+        assert response.status_code == 200
+        assert result["status"] == "cleaned"
+        assert result["watermarks_found"] == 1
+        assert pipeline.regions == [
+            {"x": 0.7, "y": 0.75, "width": 0.12, "height": 0.1}
+        ]
+        output = api._output_for_job(result["job_id"])
+        try:
+            assert output is not None
+            assert client.get(result["download_url"]).status_code == 200
+        finally:
+            if output:
+                output.unlink(missing_ok=True)
+
+    @pytest.mark.parametrize(
+        "regions",
+        [
+            "[]",
+            '[{"x":0.9,"y":0.9,"width":0.2,"height":0.2}]',
+            '[{"x":0,"y":0,"width":0.8,"height":0.8}]',
+            "not-json",
+        ],
+    )
+    def test_remove_manual_rejects_unsafe_regions(self, client, sample_image, regions):
+        with open(sample_image, "rb") as file:
+            response = client.post(
+                "/api/remove-manual",
+                files={"file": ("manual.png", file, "image/png")},
+                data={"regions": regions},
+            )
+        assert response.status_code == 422
+
     def test_download_nonexistent(self, client):
         resp = client.get("/api/download/nonexistent.png")
         assert resp.status_code == 404

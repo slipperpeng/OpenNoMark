@@ -72,6 +72,15 @@ export interface Copy {
   originalPreserved: string;
   downloadThisImage: string;
   retryThisImage: string;
+  manualEdit: string;
+  manualHint: string;
+  manualRegionCount: (count: number) => string;
+  manualUndo: string;
+  manualClear: string;
+  manualApply: string;
+  manualCancel: string;
+  manualNeedsRegion: string;
+  manualProcessing: string;
   progressComplete: (completed: number, total: number) => string;
   batchSafeOutput: string;
   downloadFile: (filename: string) => string;
@@ -166,6 +175,15 @@ const en: Copy = {
   originalPreserved: "Original preserved",
   downloadThisImage: "Download this image",
   retryThisImage: "Retry this image",
+  manualEdit: "Select watermark manually",
+  manualHint: "Drag a tight box around each watermark",
+  manualRegionCount: (count) => `${count}/8 selected`,
+  manualUndo: "Undo last",
+  manualClear: "Clear boxes",
+  manualApply: "Repair selected areas",
+  manualCancel: "Exit selection",
+  manualNeedsRegion: "Draw at least one box before applying the repair.",
+  manualProcessing: "Repairing selected areas",
   progressComplete: (completed, total) => `${completed} of ${total} complete`,
   batchSafeOutput: "Batch-safe output",
   downloadFile: (filename) => `Download ${filename}`,
@@ -260,6 +278,15 @@ const zhCN: Copy = {
   originalPreserved: "原图已保留",
   downloadThisImage: "下载这张图片",
   retryThisImage: "重试这张图片",
+  manualEdit: "手动框选水印",
+  manualHint: "拖拽一个紧贴水印的矩形，可连续框选多处",
+  manualRegionCount: (count) => `已选 ${count}/8 处`,
+  manualUndo: "撤销上一个",
+  manualClear: "清空框选",
+  manualApply: "修复框选区域",
+  manualCancel: "退出框选",
+  manualNeedsRegion: "请先至少框选一处水印。",
+  manualProcessing: "正在修复框选区域",
   progressComplete: (completed, total) => `已完成 ${completed}/${total}`,
   batchSafeOutput: "批量结果独立保存",
   downloadFile: (filename) => `下载 ${filename}`,
