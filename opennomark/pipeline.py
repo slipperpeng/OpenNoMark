@@ -123,6 +123,66 @@ class WatermarkRemovalPipeline:
 
         return result, metadata
 
+    def process_manual(self, image_path, regions, output_path=None):
+        """Repair user-confirmed normalized rectangles without auto-detection.
+
+        Manual regions are an explicit user confirmation boundary.  Each box
+        is inpainted independently so distant selections do not create one
+        oversized LaMa crop or alter pixels between the selected areas.
+        """
+        image = Image.open(image_path).convert("RGB")
+        result = image
+        public_regions = []
+
+        for region in regions:
+            x1 = int(round(float(region["x"]) * image.width))
+            y1 = int(round(float(region["y"]) * image.height))
+            x2 = int(round((float(region["x"]) + float(region["width"])) * image.width))
+            y2 = int(round((float(region["y"]) + float(region["height"])) * image.height))
+            x1, x2 = sorted((max(0, x1), min(image.width, x2)))
+            y1, y2 = sorted((max(0, y1), min(image.height, y2)))
+            if x2 <= x1 or y2 <= y1:
+                continue
+
+            box = [x1, y1, x2, y2]
+            mask = self.inpainter.create_mask(
+                image.size,
+                [{"box": box}],
+                padding=3,
+                feather=4,
+            )
+            result = self.inpainter.inpaint_local(result, mask)
+            public_regions.append(
+                {
+                    "box": box,
+                    "source": "manual_selection",
+                    "method": "box_mask",
+                    "score": 1.0,
+                }
+            )
+
+        if not public_regions:
+            raise ValueError("No valid manual regions were supplied")
+
+        if output_path:
+            os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+            ext = os.path.splitext(image_path)[1].lower()
+            if ext in (".jpg", ".jpeg"):
+                result.save(output_path, quality=95)
+            else:
+                result.save(output_path)
+
+        return result, {
+            "status": "cleaned",
+            "watermarks_found": len(public_regions),
+            "methods": ["manual_selection_local_lama"],
+            "regions": public_regions,
+            "validation": {
+                "passed": True,
+                "manual_confirmation": True,
+            },
+        }
+
     @classmethod
     def _overlapping_regions(cls, original_regions, residual_regions):
         return [

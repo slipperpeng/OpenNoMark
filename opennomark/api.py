@@ -1,6 +1,8 @@
 """FastAPI backend for OpenNoMark."""
 
 import asyncio
+import json
+import math
 import os
 import re
 import uuid
@@ -10,7 +12,7 @@ import threading
 import zipfile
 from pathlib import Path
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -68,6 +70,50 @@ class BatchDownloadItem(BaseModel):
 
 class BatchDownloadRequest(BaseModel):
     items: list[BatchDownloadItem]
+
+
+def _parse_manual_regions(raw: str) -> list[dict[str, float]]:
+    """Validate normalized user-confirmed repair rectangles."""
+    try:
+        payload = json.loads(raw)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise HTTPException(422, "Manual regions must be valid JSON") from exc
+
+    if not isinstance(payload, list) or not 1 <= len(payload) <= 8:
+        raise HTTPException(422, "Supply between 1 and 8 manual regions")
+
+    normalized = []
+    total_area = 0.0
+    for item in payload:
+        if not isinstance(item, dict):
+            raise HTTPException(422, "Each manual region must be an object")
+        try:
+            x = float(item["x"])
+            y = float(item["y"])
+            width = float(item["width"])
+            height = float(item["height"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(422, "Manual region coordinates are invalid") from exc
+
+        values = (x, y, width, height)
+        if not all(math.isfinite(value) for value in values):
+            raise HTTPException(422, "Manual region coordinates must be finite")
+        if (
+            x < 0
+            or y < 0
+            or width < 0.005
+            or height < 0.005
+            or x + width > 1.000001
+            or y + height > 1.000001
+        ):
+            raise HTTPException(422, "Manual regions must stay inside the image")
+
+        total_area += width * height
+        normalized.append({"x": x, "y": y, "width": width, "height": height})
+
+    if total_area > 0.35:
+        raise HTTPException(422, "Manual regions cover too much of the image")
+    return normalized
 
 
 def _output_for_job(job_id: str) -> Path | None:
@@ -183,6 +229,58 @@ async def remove_watermark(files: list[UploadFile] = File(...)):
         *(_process_upload(upload, pipeline) for upload in files)
     )
     return {"results": results}
+
+
+@app.post("/api/remove-manual")
+async def remove_manual_watermark(
+    file: UploadFile = File(...),
+    regions: str = Form(...),
+):
+    """Repair only the rectangles explicitly selected by the user."""
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(422, "Not an image file")
+
+    normalized_regions = _parse_manual_regions(regions)
+    pipeline = await asyncio.to_thread(get_pipeline)
+    job_id = uuid.uuid4().hex[:8]
+    ext = os.path.splitext(file.filename or "image.png")[1] or ".png"
+    input_path = UPLOAD_DIR / f"{job_id}_manual_input{ext}"
+    output_path = OUTPUT_DIR / f"{job_id}_clean{ext}"
+
+    try:
+        await asyncio.to_thread(_save_upload, file, input_path)
+        async with _processing_slots:
+            _, meta = await asyncio.to_thread(
+                pipeline.process_manual,
+                str(input_path),
+                normalized_regions,
+                str(output_path),
+            )
+        return {
+            "results": [
+                {
+                    "filename": file.filename,
+                    "job_id": job_id,
+                    "status": meta["status"],
+                    "watermarks_found": meta["watermarks_found"],
+                    "download_url": f"/api/download/{job_id}{ext}",
+                }
+            ]
+        }
+    except Exception as exc:
+        return {
+            "results": [
+                {
+                    "filename": file.filename,
+                    "status": "error",
+                    "watermarks_found": 0,
+                    "download_url": None,
+                    "error": str(exc),
+                }
+            ]
+        }
+    finally:
+        input_path.unlink(missing_ok=True)
 
 
 @app.get("/api/download/{filename}")
