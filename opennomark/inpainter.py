@@ -9,6 +9,12 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 
+LAMA_MODEL_URL = (
+    "https://github.com/enesmsahin/simple-lama-inpainting/releases/"
+    "download/v0.1.0/big-lama.pt"
+)
+
+
 def _ceil_modulo(x, mod):
     if x % mod == 0:
         return x
@@ -55,10 +61,13 @@ class LamaInpainter:
     def __init__(self, device=None):
         model_path = _lama_model_path()
         if not model_path.exists():
+            if os.environ.get("OPENNOMARK_OFFLINE_MODE") == "1":
+                raise FileNotFoundError(
+                    f"Offline Big-LaMa checkpoint is missing: {model_path}"
+                )
             from torch.hub import download_url_to_file
-            url = "https://github.com/enesmsahin/simple-lama-inpainting/releases/download/v0.1.0/big-lama.pt"
             model_path.parent.mkdir(parents=True, exist_ok=True)
-            download_url_to_file(url, str(model_path))
+            download_url_to_file(LAMA_MODEL_URL, str(model_path))
 
         # Device selection: CUDA when available, otherwise CPU. MPS is
         # intentionally skipped — LaMa's TorchScript graph contains ops

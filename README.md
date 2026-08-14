@@ -78,11 +78,14 @@ npm ci --prefix desktop
 # Build on the target operating system
 npm --prefix desktop run dist:mac
 npm --prefix desktop run dist:win
+
+# Windows x64: one large installer with all models for fully offline use
+npm --prefix desktop run dist:win:offline
 ```
 
 Installers are written to `desktop/release/`. See
 [`docs/desktop-packaging.md`](docs/desktop-packaging.md) for development,
-GitHub Actions, signing, model-cache, and distribution details.
+GitHub Actions, signing, model-cache, offline builds, and distribution details.
 
 ### 1. Web UI · best for visual review and batches
 

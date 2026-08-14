@@ -4,6 +4,7 @@ const http = require("node:http");
 const net = require("node:net");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const { resolveModelRuntime } = require("./model-runtime.cjs");
 
 let mainWindow = null;
 let backendProcess = null;
@@ -63,12 +64,19 @@ function backendLaunch(port) {
 function startBackend(port) {
   const userData = app.getPath("userData");
   const logsDir = path.join(userData, "logs");
-  const modelsDir = path.join(userData, "models");
+  const modelRuntime = resolveModelRuntime({
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    userData,
+  });
   fs.mkdirSync(logsDir, { recursive: true });
-  fs.mkdirSync(modelsDir, { recursive: true });
+  if (!modelRuntime.bundled) {
+    fs.mkdirSync(modelRuntime.modelsDir, { recursive: true });
+  }
 
   backendLog = fs.createWriteStream(path.join(logsDir, "backend.log"), { flags: "a" });
   backendLog.write(`\n[desktop] starting backend at ${new Date().toISOString()}\n`);
+  backendLog.write(`[desktop] models=${modelRuntime.bundled ? "bundled-offline" : "user-cache"}\n`);
 
   const launch = backendLaunch(port);
   backendProcess = spawn(launch.command, launch.args, {
@@ -80,9 +88,7 @@ function startBackend(port) {
       PYTHONUNBUFFERED: "1",
       OPENNOMARK_DESKTOP: "1",
       OPENNOMARK_DATA_DIR: userData,
-      OPENNOMARK_MODEL_DIR: modelsDir,
-      HF_HOME: path.join(modelsDir, "huggingface"),
-      TORCH_HOME: path.join(modelsDir, "torch"),
+      ...modelRuntime.environment,
     },
   });
   backendProcess.stdout.pipe(backendLog, { end: false });

@@ -18,6 +18,8 @@ import os
 import torch
 
 
+DEFAULT_MODEL_ID = "google/owlv2-base-patch16-ensemble"
+
 _CALIBRATION_PATH = os.path.join(
     os.path.dirname(__file__), "assets", "watermark_detector.json"
 )
@@ -191,7 +193,7 @@ class WatermarkDetector:
         )
         self.last_filter_report = {}
 
-        model_id = "google/owlv2-base-patch16-ensemble"
+        model_id = DEFAULT_MODEL_ID
         self.processor = Owlv2Processor.from_pretrained(model_id)
         self.model = Owlv2ForObjectDetection.from_pretrained(model_id).to(device)
 

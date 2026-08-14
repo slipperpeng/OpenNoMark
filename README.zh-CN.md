@@ -77,10 +77,13 @@ npm ci --prefix desktop
 # 请在目标操作系统上构建
 npm --prefix desktop run dist:mac
 npm --prefix desktop run dist:win
+
+# Windows x64：生成包含全部模型、可完全离线使用的单个大型安装程序
+npm --prefix desktop run dist:win:offline
 ```
 
 安装包生成在 `desktop/release/`。开发运行、GitHub Actions、签名、模型缓存和
-分发说明见 [`docs/desktop-packaging.md`](docs/desktop-packaging.md)。
+完整离线版的分发说明见 [`docs/desktop-packaging.md`](docs/desktop-packaging.md)。
 
 ### 1. Web UI · 适合可视化检查与批量任务
 

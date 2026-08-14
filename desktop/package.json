@@ -9,11 +9,15 @@
     "dev": "electron .",
     "prepare:frontend": "npm --prefix ../frontend run build",
     "prepare:backend": "uv run --frozen --project .. --extra api --extra desktop pyinstaller --noconfirm --clean --distpath backend-dist --workpath ../build/pyinstaller ../packaging/opennomark-backend.spec",
+    "prepare:offline-models": "uv run --frozen --project .. --extra api python ../packaging/prepare_offline_models.py download --output bundled-models",
+    "verify:offline-models": "uv run --frozen --project .. --extra api python ../packaging/prepare_offline_models.py verify --output bundled-models",
     "prepare:desktop": "npm run prepare:frontend && npm run prepare:backend",
+    "test": "node --test test/*.test.cjs",
     "pack": "npm run prepare:desktop && electron-builder --dir",
     "dist": "npm run prepare:desktop && electron-builder",
     "dist:mac": "npm run prepare:desktop && electron-builder --mac dmg",
-    "dist:win": "npm run prepare:desktop && electron-builder --win nsis"
+    "dist:win": "npm run prepare:desktop && electron-builder --win nsis",
+    "dist:win:offline": "npm run prepare:desktop && npm run prepare:offline-models && npm run verify:offline-models && electron-builder --config electron-builder.offline.cjs --win nsis"
   },
   "devDependencies": {
     "electron": "37.4.0",
@@ -28,6 +32,7 @@
     },
     "files": [
       "main.cjs",
+      "model-runtime.cjs",
       "loading.html",
       "build/icon.png"
     ],

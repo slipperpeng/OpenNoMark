@@ -228,6 +228,7 @@ frontend/node_modules/
 frontend/dist/
 desktop/node_modules/
 desktop/backend-dist/
+desktop/bundled-models/
 desktop/release/
 build/pyinstaller/
 !desktop/build/

@@ -22,6 +22,16 @@ class TestLamaInpainter:
         monkeypatch.setenv("OPENNOMARK_MODEL_DIR", str(tmp_path))
         assert _lama_model_path() == tmp_path / "lama" / "big-lama.pt"
 
+    def test_offline_mode_does_not_download_missing_checkpoint(
+        self, monkeypatch, tmp_path
+    ):
+        from opennomark.inpainter import LamaInpainter
+
+        monkeypatch.setenv("OPENNOMARK_MODEL_DIR", str(tmp_path))
+        monkeypatch.setenv("OPENNOMARK_OFFLINE_MODE", "1")
+        with pytest.raises(FileNotFoundError, match="Offline Big-LaMa checkpoint"):
+            LamaInpainter(device="cpu")
+
     def test_create_mask_basic(self, inpainter):
         boxes = [{"box": [100, 100, 150, 150]}]
         mask = inpainter.create_mask((400, 400), boxes, padding=10, feather=0)
