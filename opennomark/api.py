@@ -7,6 +7,7 @@ import os
 import re
 import uuid
 import shutil
+import sys
 import tempfile
 import threading
 import zipfile
@@ -23,9 +24,10 @@ from . import __version__
 
 app = FastAPI(title="OpenNoMark", version=__version__)
 
+DESKTOP_MODE = os.environ.get("OPENNOMARK_DESKTOP") == "1"
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[] if DESKTOP_MODE else ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -34,6 +36,23 @@ app.add_middleware(
 # inference runs in worker threads instead of blocking the ASGI event loop.
 _pipeline = None
 _pipeline_init_lock = threading.Lock()
+_pipeline_preload_thread = None
+_model_state_lock = threading.Lock()
+_model_state = {
+    "status": "idle",
+    "error": None,
+}
+
+
+def _set_model_state(status: str, error: str | None = None) -> None:
+    with _model_state_lock:
+        _model_state["status"] = status
+        _model_state["error"] = error
+
+
+def model_state() -> dict[str, str | None]:
+    with _model_state_lock:
+        return dict(_model_state)
 
 
 def _configured_concurrency() -> int:
@@ -57,10 +76,16 @@ def _configured_concurrency() -> int:
 
 PROCESSING_CONCURRENCY = _configured_concurrency()
 _processing_slots = asyncio.Semaphore(PROCESSING_CONCURRENCY)
-UPLOAD_DIR = Path(tempfile.gettempdir()) / "opennomark_uploads"
-OUTPUT_DIR = Path(tempfile.gettempdir()) / "opennomark_outputs"
-UPLOAD_DIR.mkdir(exist_ok=True)
-OUTPUT_DIR.mkdir(exist_ok=True)
+configured_data_dir = os.environ.get("OPENNOMARK_DATA_DIR")
+if configured_data_dir:
+    runtime_dir = Path(configured_data_dir).expanduser() / "runtime"
+    UPLOAD_DIR = runtime_dir / "uploads"
+    OUTPUT_DIR = runtime_dir / "outputs"
+else:
+    UPLOAD_DIR = Path(tempfile.gettempdir()) / "opennomark_uploads"
+    OUTPUT_DIR = Path(tempfile.gettempdir()) / "opennomark_outputs"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class BatchDownloadItem(BaseModel):
@@ -154,8 +179,39 @@ def get_pipeline():
     if _pipeline is None:
         with _pipeline_init_lock:
             if _pipeline is None:
-                _pipeline = _create_pipeline()
+                _set_model_state("loading")
+                try:
+                    _pipeline = _create_pipeline()
+                except Exception as exc:
+                    _set_model_state("error", str(exc))
+                    raise
+                else:
+                    _set_model_state("ready")
     return _pipeline
+
+
+def start_pipeline_preload() -> threading.Thread:
+    """Warm the desktop models without blocking the local HTTP server."""
+    global _pipeline_preload_thread
+    if _pipeline_preload_thread is not None and _pipeline_preload_thread.is_alive():
+        return _pipeline_preload_thread
+
+    def preload() -> None:
+        try:
+            get_pipeline()
+        except Exception:
+            # The error is exposed through /api/health and a later request can
+            # retry initialization after the user fixes connectivity or disk
+            # space.
+            pass
+
+    _pipeline_preload_thread = threading.Thread(
+        target=preload,
+        name="opennomark-model-preload",
+        daemon=True,
+    )
+    _pipeline_preload_thread.start()
+    return _pipeline_preload_thread
 
 
 def _save_upload(upload: UploadFile, input_path: Path) -> None:
@@ -218,6 +274,8 @@ def health():
         "status": "ok",
         "version": __version__,
         "max_concurrency": PROCESSING_CONCURRENCY,
+        "desktop": DESKTOP_MODE,
+        "models": model_state(),
     }
 
 
@@ -331,7 +389,14 @@ def download_batch(request: BatchDownloadRequest):
     )
 
 
-# Serve frontend static files if they exist
-FRONTEND_DIR = Path(__file__).parent.parent / "frontend" / "dist"
+# Serve frontend static files if they exist. PyInstaller extracts bundled data
+# under ``sys._MEIPASS``; source checkouts continue to use frontend/dist.
+configured_frontend_dir = os.environ.get("OPENNOMARK_FRONTEND_DIR")
+if configured_frontend_dir:
+    FRONTEND_DIR = Path(configured_frontend_dir).expanduser()
+elif getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    FRONTEND_DIR = Path(sys._MEIPASS) / "frontend" / "dist"
+else:
+    FRONTEND_DIR = Path(__file__).parent.parent / "frontend" / "dist"
 if FRONTEND_DIR.exists():
     app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")

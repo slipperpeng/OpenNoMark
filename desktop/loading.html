@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'" />
+    <title>Starting OpenNoMark</title>
+    <style>
+      :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f3f1eb; color: #242522; }
+      main { display: flex; align-items: center; gap: 18px; padding: 28px; }
+      .mark { position: relative; width: 44px; height: 44px; border: 1px solid #c8c4b9; border-radius: 13px; background: #fbfaf7; transform: rotate(45deg); }
+      .mark::before, .mark::after { position: absolute; inset: 50% auto auto 50%; content: ""; background: #147d72; transform: translate(-50%, -50%); }
+      .mark::before { width: 20px; height: 2px; }
+      .mark::after { width: 2px; height: 20px; }
+      h1 { margin: 0 0 5px; font-size: 17px; letter-spacing: -0.02em; }
+      p { margin: 0; color: #676963; font-size: 13px; }
+      .pulse { animation: pulse 1.35s ease-in-out infinite; }
+      @keyframes pulse { 0%, 100% { opacity: .42; } 50% { opacity: 1; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark pulse" aria-hidden="true"></div>
+      <div>
+        <h1>Starting OpenNoMark</h1>
+        <p>Preparing the local image-processing service...</p>
+      </div>
+    </main>
+  </body>
+</html>

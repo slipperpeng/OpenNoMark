@@ -33,6 +33,8 @@ class TestAPI:
         assert data["status"] == "ok"
         assert "version" in data
         assert 1 <= data["max_concurrency"] <= 4
+        assert isinstance(data["desktop"], bool)
+        assert data["models"]["status"] in ("idle", "loading", "ready", "error")
 
     def test_remove_single(self, client, sample_image):
         with open(sample_image, "rb") as f:
@@ -148,6 +150,23 @@ class TestAPI:
 
         assert calls == 1
         assert all(pipeline is sentinel for pipeline in pipelines)
+
+    def test_pipeline_initialization_updates_model_state(self, monkeypatch):
+        import opennomark.api as api
+
+        sentinel = object()
+        previous_state = api.model_state()
+        monkeypatch.setattr(api, "_pipeline", None)
+        monkeypatch.setattr(api, "_create_pipeline", lambda: sentinel)
+        api._set_model_state("idle")
+        try:
+            assert api.get_pipeline() is sentinel
+            assert api.model_state() == {"status": "ready", "error": None}
+        finally:
+            api._set_model_state(
+                previous_state["status"],
+                previous_state["error"],
+            )
 
     def test_partial_validation_is_exposed_as_retryable_error(
         self, client, sample_image, monkeypatch

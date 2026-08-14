@@ -63,6 +63,25 @@ LaMa 会根据周围内容重建蒙版区域，而不是简单模糊水印。最
 
 ## 选择适合你的使用方式
 
+### 桌面应用 · 打包为 macOS 和 Windows 安装包
+
+这个 Fork 在现有 React 与 FastAPI 应用外增加了 Electron 桌面壳。Python
+服务通过 PyInstaller 以 sidecar 方式打包，只监听随机本机端口；首次运行
+下载的模型会保存在操作系统的用户应用数据目录中，升级应用不会重复下载。
+
+```bash
+uv sync --frozen --extra api --extra desktop
+npm ci --prefix frontend
+npm ci --prefix desktop
+
+# 请在目标操作系统上构建
+npm --prefix desktop run dist:mac
+npm --prefix desktop run dist:win
+```
+
+安装包生成在 `desktop/release/`。开发运行、GitHub Actions、签名、模型缓存和
+分发说明见 [`docs/desktop-packaging.md`](docs/desktop-packaging.md)。
+
 ### 1. Web UI · 适合可视化检查与批量任务
 
 环境要求：Python 3.10+、[uv](https://docs.astral.sh/uv/) 与 Node.js/npm。建议使用至少 16 GB 内存的设备。

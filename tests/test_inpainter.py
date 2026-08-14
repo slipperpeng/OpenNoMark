@@ -16,6 +16,12 @@ class TestLamaInpainter:
     def test_init(self, inpainter):
         assert inpainter.model is not None
 
+    def test_desktop_model_cache_path(self, monkeypatch, tmp_path):
+        from opennomark.inpainter import _lama_model_path
+
+        monkeypatch.setenv("OPENNOMARK_MODEL_DIR", str(tmp_path))
+        assert _lama_model_path() == tmp_path / "lama" / "big-lama.pt"
+
     def test_create_mask_basic(self, inpainter):
         boxes = [{"box": [100, 100, 150, 150]}]
         mask = inpainter.create_mask((400, 400), boxes, padding=10, feather=0)

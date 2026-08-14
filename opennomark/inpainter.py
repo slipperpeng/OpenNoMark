@@ -1,6 +1,8 @@
 """LaMa-based inpainting with feathered mask blending."""
 
 import os
+from pathlib import Path
+
 import torch
 import cv2
 import numpy as np
@@ -11,6 +13,20 @@ def _ceil_modulo(x, mod):
     if x % mod == 0:
         return x
     return (x // mod + 1) * mod
+
+
+def _lama_model_path() -> Path:
+    """Return a desktop-friendly cache path for the LaMa checkpoint.
+
+    Packaged desktop builds set ``OPENNOMARK_MODEL_DIR`` to Electron's user
+    data directory so model downloads survive application upgrades and never
+    attempt to write inside the signed application bundle. Source installs
+    keep the historical Torch Hub cache location.
+    """
+    configured = os.environ.get("OPENNOMARK_MODEL_DIR")
+    if configured:
+        return Path(configured).expanduser() / "lama" / "big-lama.pt"
+    return Path(torch.hub.get_dir()) / "checkpoints" / "big-lama.pt"
 
 
 def create_box_mask(image_size, boxes, padding=3, feather=4):
@@ -37,12 +53,12 @@ def create_box_mask(image_size, boxes, padding=3, feather=4):
 
 class LamaInpainter:
     def __init__(self, device=None):
-        model_path = os.path.expanduser("~/.cache/torch/hub/checkpoints/big-lama.pt")
-        if not os.path.exists(model_path):
+        model_path = _lama_model_path()
+        if not model_path.exists():
             from torch.hub import download_url_to_file
             url = "https://github.com/enesmsahin/simple-lama-inpainting/releases/download/v0.1.0/big-lama.pt"
-            os.makedirs(os.path.dirname(model_path), exist_ok=True)
-            download_url_to_file(url, model_path)
+            model_path.parent.mkdir(parents=True, exist_ok=True)
+            download_url_to_file(url, str(model_path))
 
         # Device selection: CUDA when available, otherwise CPU. MPS is
         # intentionally skipped — LaMa's TorchScript graph contains ops
@@ -59,7 +75,7 @@ class LamaInpainter:
         # The checkpoint is CUDA-serialized; deserialize on CPU first, then
         # move to the target device. This is what makes it loadable on
         # CPU-only and non-NVIDIA machines.
-        self.model = torch.jit.load(model_path, map_location="cpu")
+        self.model = torch.jit.load(str(model_path), map_location="cpu")
         self.model = self.model.to(self.device)
         self.model.eval()
 

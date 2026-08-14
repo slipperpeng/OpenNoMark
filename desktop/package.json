@@ -1,0 +1,66 @@
+{
+  "name": "opennomark-desktop",
+  "version": "0.2.0",
+  "private": true,
+  "author": "OpenNoMark contributors",
+  "description": "Desktop distribution for the OpenNoMark local watermark remover",
+  "main": "main.cjs",
+  "scripts": {
+    "dev": "electron .",
+    "prepare:frontend": "npm --prefix ../frontend run build",
+    "prepare:backend": "uv run --frozen --project .. --extra api --extra desktop pyinstaller --noconfirm --clean --distpath backend-dist --workpath ../build/pyinstaller ../packaging/opennomark-backend.spec",
+    "prepare:desktop": "npm run prepare:frontend && npm run prepare:backend",
+    "pack": "npm run prepare:desktop && electron-builder --dir",
+    "dist": "npm run prepare:desktop && electron-builder",
+    "dist:mac": "npm run prepare:desktop && electron-builder --mac dmg",
+    "dist:win": "npm run prepare:desktop && electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "37.4.0",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "io.github.slipperpeng.opennomark",
+    "productName": "OpenNoMark",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.cjs",
+      "loading.html",
+      "build/icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "backend-dist/opennomark-backend",
+        "to": "backend/opennomark-backend"
+      },
+      {
+        "from": "../LICENSE",
+        "to": "LICENSE.txt"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.graphics-design",
+      "icon": "build/icon.png",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "target": ["dmg"]
+    },
+    "dmg": {
+      "sign": false
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "target": ["nsis"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+  }
+}

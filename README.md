@@ -63,6 +63,27 @@ LaMa reconstructs the masked area from its surroundings instead of blurring the 
 
 ## Choose your workflow
 
+### Desktop app · packaged for macOS and Windows
+
+This fork adds an Electron desktop shell around the existing React and FastAPI
+application. The Python service is packaged as a PyInstaller sidecar, binds to
+a random loopback port, and keeps downloaded models in the operating system's
+per-user application data directory.
+
+```bash
+uv sync --frozen --extra api --extra desktop
+npm ci --prefix frontend
+npm ci --prefix desktop
+
+# Build on the target operating system
+npm --prefix desktop run dist:mac
+npm --prefix desktop run dist:win
+```
+
+Installers are written to `desktop/release/`. See
+[`docs/desktop-packaging.md`](docs/desktop-packaging.md) for development,
+GitHub Actions, signing, model-cache, and distribution details.
+
 ### 1. Web UI · best for visual review and batches
 
 Requirements: Python 3.10+, [uv](https://docs.astral.sh/uv/), and Node.js/npm. A machine with at least 16 GB of memory is recommended.

@@ -31,6 +31,7 @@ MANIFEST
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+!packaging/opennomark-backend.spec
 
 # Installer logs
 pip-log.txt
@@ -225,6 +226,13 @@ test_cli_output/
 # Frontend build & deps
 frontend/node_modules/
 frontend/dist/
+desktop/node_modules/
+desktop/backend-dist/
+desktop/release/
+build/pyinstaller/
+!desktop/build/
+!desktop/build/icon.png
+!desktop/build/icon.svg
 
 # Pytest
 .pytest_cache/

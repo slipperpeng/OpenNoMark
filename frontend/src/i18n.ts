@@ -12,6 +12,10 @@ export interface Copy {
   source: string;
   language: string;
   switchLanguage: string;
+  modelsPreparingTitle: string;
+  modelsPreparingDescription: string;
+  modelsFailedTitle: string;
+  modelsFailedDescription: string;
   eyebrow: string;
   heroTitle: string;
   heroDescription: string;
@@ -115,6 +119,10 @@ const en: Copy = {
   source: "GitHub",
   language: "Language",
   switchLanguage: "切换至中文",
+  modelsPreparingTitle: "Preparing local AI models",
+  modelsPreparingDescription: "The first launch downloads and loads the detection and repair models. You can add images while this finishes.",
+  modelsFailedTitle: "The local models could not be prepared",
+  modelsFailedDescription: "Check your connection and available disk space, then restart OpenNoMark.",
   eyebrow: "Precision, not a blur brush",
   heroTitle: "Remove the mark. Keep the image.",
   heroDescription: "Upload one image or a whole set. Every file keeps its own status, result, retry, and download path.",
@@ -218,6 +226,10 @@ const zhCN: Copy = {
   source: "GitHub",
   language: "语言",
   switchLanguage: "Switch to English",
+  modelsPreparingTitle: "正在准备本地 AI 模型",
+  modelsPreparingDescription: "首次启动会下载并加载检测与修复模型。等待期间可以先添加图片。",
+  modelsFailedTitle: "本地模型准备失败",
+  modelsFailedDescription: "请检查网络连接和磁盘空间，然后重新启动 OpenNoMark。",
   eyebrow: "精准修复，而不是模糊涂抹",
   heroTitle: "去掉水印，保留原图质感。",
   heroDescription: "单张或批量上传均可。每张图片都有独立进度、处理结果、重试和下载入口。",

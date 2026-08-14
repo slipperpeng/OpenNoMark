@@ -72,6 +72,11 @@ interface BatchProgress {
 
 interface HealthResponse {
   max_concurrency?: number;
+  desktop?: boolean;
+  models?: {
+    status?: "idle" | "loading" | "ready" | "error";
+    error?: string | null;
+  };
 }
 
 const acceptedExtensions = /\.(png|jpe?g|webp)$/i;
@@ -304,6 +309,9 @@ export default function App() {
   const [dragActive, setDragActive] = useState(false);
   const [message, setMessage] = useState<UiMessage | null>(null);
   const [manualEditingId, setManualEditingId] = useState<string | null>(null);
+  const [desktopModelStatus, setDesktopModelStatus] = useState<
+    "idle" | "loading" | "ready" | "error" | null
+  >(null);
   const imagesRef = useRef<ImageEntry[]>([]);
 
   useEffect(() => {
@@ -311,19 +319,41 @@ export default function App() {
   }, [images]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    void fetch("/api/health", { signal: controller.signal })
-      .then((response) => response.ok ? response.json() as Promise<HealthResponse> : null)
-      .then((health) => {
-        const configured = health?.max_concurrency;
-        if (!controller.signal.aborted && typeof configured === "number") {
+    let cancelled = false;
+    let retryTimer: number | undefined;
+
+    const pollHealth = async () => {
+      try {
+        const response = await fetch("/api/health");
+        if (!response.ok) throw new Error("health check failed");
+        const health = await response.json() as HealthResponse;
+        if (cancelled) return;
+
+        const configured = health.max_concurrency;
+        if (typeof configured === "number") {
           setBatchConcurrency(
             Math.max(1, Math.min(maximumBatchConcurrency, Math.floor(configured))),
           );
         }
-      })
-      .catch(() => undefined);
-    return () => controller.abort();
+
+        const nextStatus = health.desktop ? health.models?.status || "idle" : null;
+        setDesktopModelStatus(nextStatus);
+        if (nextStatus && nextStatus !== "ready") {
+          retryTimer = window.setTimeout(
+            pollHealth,
+            nextStatus === "error" ? 5000 : 1500,
+          );
+        }
+      } catch {
+        if (!cancelled) retryTimer = window.setTimeout(pollHealth, 1500);
+      }
+    };
+
+    void pollHealth();
+    return () => {
+      cancelled = true;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+    };
   }, []);
 
   useEffect(() => {
@@ -665,7 +695,7 @@ export default function App() {
               <span className="sr-only">{t.language}</span>
             </button>
             <a
-              href="https://github.com/NanmiCoder/OpenNoMark"
+              href="https://github.com/slipperpeng/OpenNoMark"
               target="_blank"
               rel="noreferrer"
               aria-label={t.source}
@@ -678,6 +708,35 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {desktopModelStatus && desktopModelStatus !== "ready" && (
+        <div
+          className={`border-b px-4 py-3 sm:px-6 lg:px-10 ${
+            desktopModelStatus === "error"
+              ? "border-[var(--danger)]/25 bg-[var(--danger-soft)]"
+              : "border-[var(--accent)]/20 bg-[var(--accent-soft)]"
+          }`}
+          role={desktopModelStatus === "error" ? "alert" : "status"}
+        >
+          <div className="mx-auto flex max-w-[1400px] items-start gap-3">
+            {desktopModelStatus === "error" ? (
+              <WarningCircleIcon size={18} weight="fill" className="mt-0.5 shrink-0 text-[var(--danger)]" />
+            ) : (
+              <CircleNotchIcon size={18} weight="bold" className="task-spinner mt-0.5 shrink-0 text-[var(--accent)]" />
+            )}
+            <span>
+              <span className="block text-sm font-semibold">
+                {desktopModelStatus === "error" ? t.modelsFailedTitle : t.modelsPreparingTitle}
+              </span>
+              <span className="mt-0.5 block text-xs leading-5 text-[var(--ink-muted)]">
+                {desktopModelStatus === "error"
+                  ? t.modelsFailedDescription
+                  : t.modelsPreparingDescription}
+              </span>
+            </span>
+          </div>
+        </div>
+      )}
 
       <main className="mx-auto grid w-full max-w-[1400px] gap-10 px-4 py-8 sm:px-6 sm:py-12 lg:grid-cols-[minmax(320px,0.78fr)_minmax(0,1.42fr)] lg:gap-14 lg:px-10 lg:py-16">
         <section className="min-w-0">
