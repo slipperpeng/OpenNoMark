@@ -6,6 +6,7 @@ import argparse
 import gc
 import json
 import os
+import shutil
 from pathlib import Path
 
 
@@ -110,6 +111,23 @@ def write_manifest(root: Path) -> None:
     print(f"Wrote offline model manifest: {manifest_path}", flush=True)
 
 
+def materialize_cache_symlinks(root: Path) -> None:
+    """Replace Hugging Face cache symlinks with files for Windows packaging.
+
+    GitHub's Windows runners can create cache symlinks, but the 7-Zip binary
+    used by electron-builder cannot add those links to an NSIS archive.
+    Materializing only the generated bundle keeps normal user caches intact.
+    """
+    links = [path for path in root.rglob("*") if path.is_symlink()]
+    for link in links:
+        target = link.resolve(strict=True)
+        if not target.is_file():
+            raise RuntimeError(f"Unsupported model-cache symlink: {link} -> {target}")
+        link.unlink()
+        shutil.copy2(target, link)
+    print(f"Materialized {len(links)} model-cache symlinks", flush=True)
+
+
 def validate_manifest(root: Path) -> None:
     manifest_path = root / MANIFEST_NAME
     try:
@@ -139,6 +157,7 @@ def main(argv: list[str] | None = None) -> None:
         print("Offline model verification passed", flush=True)
     else:
         load_models(local_files_only=False)
+        materialize_cache_symlinks(root)
         write_manifest(root)
 
 

@@ -84,7 +84,7 @@ artifacts. Public distribution should add:
 - A review of the repository and model licenses before redistribution.
 
 Run **Offline Windows installer** manually, or push a tag such as
-`desktop-offline-v0.2.0`, to build the complete offline Windows x64 installer.
+`desktop-offline-v0.2.1`, to build the complete offline Windows x64 installer.
 
 ## Runtime security
 
